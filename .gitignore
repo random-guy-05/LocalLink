@@ -1,0 +1,11 @@
+/build/
+/dist/
+/.venv/
+*.dmg
+*.DS_Store
+__pycache__/
+*.pyc
+*.sock
+known_hosts*
+*.pem
+*.key

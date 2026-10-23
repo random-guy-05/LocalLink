@@ -1,0 +1,22 @@
+name: macOS build
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  universal-app:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Intel and Apple Silicon
+        env:
+          LOCALLINK_ARCHS: x86_64 arm64
+        run: bash build.sh
+      - name: Run core regressions
+        env:
+          LOCALLINK_SKIP_ENGINE_CHECK: '1'
+        run: bash test.sh
+      - name: Verify bundle
+        run: codesign --verify --deep --strict dist/LocalLink.app
