@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 task_root="$(cd "$(dirname "$0")" && pwd)"
-task_version="0.5.1"
+task_version="0.5.2"
 task_dmgbuild="${DMGBUILD:-dmgbuild}"
 task_app="$task_root/dist/LocalLink.app"
 [[ -d "$task_app" ]] || { echo "Run build.sh first." >&2; exit 1; }

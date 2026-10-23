@@ -4,7 +4,7 @@
 
 A native remote desktop app for your own Macs. **LocalLink handles capture, video encoding and decoding, system sound, and mouse and keyboard control itself.** No Parsec, Sunshine, Moonlight, browser runtime, or streaming server application is required. Tailscale provides the private connection between your Macs.
 
-**[Download the native engine preview](https://github.com/random-guy-05/LocalLink/releases/tag/v0.5.1)** · macOS 14+ · Intel and Apple Silicon
+**[Download the native engine preview](https://github.com/random-guy-05/LocalLink/releases/tag/v0.5.2)** · macOS 14+ · Intel and Apple Silicon
 
 ![LocalLink native dashboard](assets/preview.png)
 
@@ -12,12 +12,12 @@ Version 0.5 improves the working native engine with a redesigned workspace, nati
 
 ## Install on both Macs
 
-1. Download `LocalLink-0.5.1-universal.dmg`, open it, and drag LocalLink to Applications on **both** Macs.
+1. Download `LocalLink-0.5.2-universal.dmg`, open it, and drag LocalLink to Applications on **both** Macs.
 2. Keep [Tailscale](https://tailscale.com/download/mac) connected on both Macs.
 3. On the host Mac, open LocalLink → **This Mac**. Give **LocalLink** Screen Recording (screen and system audio) and Accessibility permissions. Restart LocalLink after granting Screen Recording.
 4. Click **Start sharing this Mac**, then **Copy key**. Keep the host awake, signed in, and LocalLink running. LocalLink prevents idle system sleep while sharing; it does not bypass the lock screen, FileVault login, or a closed laptop lid.
 5. On the viewing Mac, enter the host’s Tailscale IP or hostname and paste its pairing key. Click **Connect to Mac**.
-6. Click the picture in the remote desktop window for input. Use the toolbar for full screen; Command–Shift–D disconnects. Control–Command–F toggles native full screen; Control–Option–Command–Escape releases or recaptures input. Move to the top edge for the floating controls. Fit, Fill and Actual Pixels scaling are available there. Closing the viewer disconnects it. Network drops keep the viewer window and its full-screen Space open and retry automatically. Manual disconnect cancels retries, preserves your key and offers Reconnect. Stop sharing on the host to make it unavailable.
+6. Click the picture in the remote desktop window for input. Click the green macOS window button for native full screen (red closes, yellow minimizes); Command–Shift–D disconnects. Control–Command–F toggles native full screen; Control–Option–Command–Escape releases or recaptures input. Move to the top edge for the floating controls. Fit, Fill and Actual Pixels scaling are available there. Closing the viewer disconnects it. Network drops keep the viewer window and its full-screen Space open and retry automatically. Manual disconnect cancels retries, preserves your key and offers Reconnect. Stop sharing on the host to make it unavailable.
 
 There is no Sunshine dashboard, Moonlight pairing, SSH password, or additional host service. Permissions previously given to another app do not apply to LocalLink.
 
@@ -76,6 +76,10 @@ DMGBUILD=.venv/bin/dmgbuild bash release.sh
 ```
 
 The release includes a SHA-256 checksum. Personal addresses, pairing keys and local settings are never bundled.
+
+## Standard window controls in 0.5.2
+
+Both the workspace and remote desktop have a standard macOS title bar. The green traffic light enters and exits native full screen instead of expanding the window. Red closes; yellow minimizes. Control–Command–F and the viewer toolbar also toggle full screen. This viewer-only change works with the existing 0.5.1 host; the host does not need an update.
 
 ## Permission recovery in 0.5.1
 

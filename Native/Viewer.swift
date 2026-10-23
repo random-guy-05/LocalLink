@@ -10,7 +10,7 @@ struct NativeViewer: View {
     var body: some View {
         ZStack(alignment: .top) {
             RemoteCanvas(presenter: model.presenter, scale: model.scale, inputEnabled: model.connected && model.captureInput && model.remoteControlAvailable, hideCursor: !hovering && model.captureInput && model.remoteControlAvailable, input: model.send, release: model.releaseInput, releaseShortcut: model.toggleInput).frame(maxWidth: .infinity, maxHeight: .infinity)
-            if controls || hovering || !model.captureInput || !model.connected { toolbar.padding(.top, windowState.fullscreen ? 12 : 36).transition(.opacity.combined(with: .move(edge: .top))).zIndex(3) }
+            if controls || hovering || !model.captureInput || !model.connected { toolbar.padding(.top, 12).transition(.opacity.combined(with: .move(edge: .top))).zIndex(3) }
             if !model.connected { connectionOverlay.zIndex(2) }
             if model.connected && !model.remoteControlAvailable {
                 VStack { Spacer(); Label("View only — enable LocalLink in Accessibility on the host Mac. If already enabled, remove the old entry, add the installed app again, and reopen it.", systemImage: "cursorarrow.slash").font(.system(size: 11)).foregroundStyle(.orange).padding(14).frame(maxWidth: 620).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12)).padding(18) }.allowsHitTesting(false)

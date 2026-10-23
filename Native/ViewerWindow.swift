@@ -10,9 +10,7 @@ import AppKit
         guard self.window !== window else { return }
         self.window = window
         window.title = "\(model.computerName) — LocalLink"
-        window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
-        window.styleMask.insert(.fullSizeContentView)
-        window.collectionBehavior.insert(.fullScreenPrimary)
+        NativeWindowControls.configure(window)
         window.backgroundColor = .black
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: NSWindow.didEnterFullScreenNotification, object: window, queue: .main) { [weak self] _ in Task { @MainActor in self?.fullscreen = true } })

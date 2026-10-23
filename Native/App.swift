@@ -17,8 +17,10 @@ struct LocalLinkNativeApp: App {
     @StateObject private var model = NativeModel()
     var body: some Scene {
         WindowGroup("LocalLink", id: "workspace") {
-            NativeHome(model: model).onAppear { delegate.model = model; model.startLifecycle() }
-        }.defaultSize(width: 1100, height: 790).windowStyle(.hiddenTitleBar)
+            NativeHome(model: model)
+                .background(StandardWindowBridge().frame(width: 0, height: 0))
+                .onAppear { delegate.model = model; model.startLifecycle() }
+        }.defaultSize(width: 1100, height: 790).windowStyle(.titleBar)
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandMenu("Connection") {
@@ -30,7 +32,7 @@ struct LocalLinkNativeApp: App {
                 Button("Stop sharing this Mac") { model.stopHosting() }.disabled(!model.hosting)
             }
         }
-        Window("Remote Mac", id: "remote") { NativeViewer(model: model) }.defaultSize(width: 1440, height: 900).windowStyle(.hiddenTitleBar)
+        Window("Remote Mac", id: "remote") { NativeViewer(model: model) }.defaultSize(width: 1440, height: 900).windowStyle(.titleBar)
         MenuBarExtra("LocalLink", systemImage: "rectangle.connected.to.line.below") { NativeTray(model: model) }
     }
 }
@@ -39,7 +41,7 @@ struct LocalLinkNativeApp: App {
     @MainActor static func main() {
         let args = CommandLine.arguments
         if args.contains("--engine-info") {
-            print("LocalLink 0.5.1 native preview\nCapture: ScreenCaptureKit\nVideo: VideoToolbox hardware H.264 / HEVC\nSound: ScreenCaptureKit + AVAudioEngine\nInput: CoreGraphics\nNetwork: Network.framework TLS 1.2 PSK AES-128-GCM, port 48100\nExternal streaming applications: none")
+            print("LocalLink 0.5.2 native preview\nCapture: ScreenCaptureKit\nVideo: VideoToolbox hardware H.264 / HEVC\nSound: ScreenCaptureKit + AVAudioEngine\nInput: CoreGraphics\nNetwork: Network.framework TLS 1.2 PSK AES-128-GCM, port 48100\nExternal streaming applications: none")
             return
         }
         if let index = args.firstIndex(of: "--render-preview"), index + 1 < args.count {
