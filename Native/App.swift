@@ -41,7 +41,7 @@ struct LocalLinkNativeApp: App {
     @MainActor static func main() {
         let args = CommandLine.arguments
         if args.contains("--engine-info") {
-            print("LocalLink 0.4.0 native preview\nCapture: ScreenCaptureKit\nVideo: VideoToolbox hardware H.264 / HEVC\nSound: ScreenCaptureKit + AVAudioEngine\nInput: CoreGraphics\nNetwork: Network.framework TLS 1.2 PSK AES-128-GCM, port 48100\nExternal streaming applications: none")
+            print("LocalLink 0.4.1 native preview\nCapture: ScreenCaptureKit\nVideo: VideoToolbox hardware H.264 / HEVC\nSound: ScreenCaptureKit + AVAudioEngine\nInput: CoreGraphics\nNetwork: Network.framework TLS 1.2 PSK AES-128-GCM, port 48100\nExternal streaming applications: none")
             return
         }
         if let index = args.firstIndex(of: "--render-preview"), index + 1 < args.count {
@@ -89,7 +89,7 @@ struct NativeHome: View {
                 VStack(alignment: .leading, spacing: 9) {
                     Label("Native engine", systemImage: "cpu").font(.system(size: 12, weight: .medium)).foregroundStyle(accent)
                     Text("Capture, video, sound and control built into LocalLink.").font(.system(size: 11)).foregroundStyle(.secondary).lineSpacing(4)
-                    Text("0.4.0 · PREVIEW").font(.system(size: 10, design: .monospaced)).foregroundStyle(.tertiary).padding(.top, 5)
+                    Text("0.4.1 · PREVIEW").font(.system(size: 10, design: .monospaced)).foregroundStyle(.tertiary).padding(.top, 5)
                 }.padding(15).background(.white.opacity(0.025), in: RoundedRectangle(cornerRadius: 12))
             }.padding(22).frame(width: 240).background(.black.opacity(0.22))
             Rectangle().fill(.white.opacity(0.07)).frame(width: 1)

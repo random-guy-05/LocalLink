@@ -4,7 +4,7 @@
 
 A native remote desktop app for your own Macs. **LocalLink handles capture, video encoding and decoding, system sound, and mouse and keyboard control itself.** No Parsec, Sunshine, Moonlight, browser runtime, or streaming server application is required. Tailscale provides the private connection between your Macs.
 
-**[Download the native engine preview](https://github.com/random-guy-05/LocalLink/releases/tag/v0.4.0)** · macOS 14+ · Intel and Apple Silicon
+**[Download the native engine preview](https://github.com/random-guy-05/LocalLink/releases/tag/v0.4.1)** · macOS 14+ · Intel and Apple Silicon
 
 ![LocalLink native dashboard](assets/preview.png)
 
@@ -12,7 +12,7 @@ Version 0.4 replaces the third-party streaming stack used by 0.3. It is an early
 
 ## Install on both Macs
 
-1. Download `LocalLink-0.4.0-universal.dmg`, open it, and drag LocalLink to Applications on **both** Macs.
+1. Download `LocalLink-0.4.1-universal.dmg`, open it, and drag LocalLink to Applications on **both** Macs.
 2. Keep [Tailscale](https://tailscale.com/download/mac) connected on both Macs.
 3. On the host Mac, open LocalLink → **Share this Mac**. Give **LocalLink** Screen Recording (screen and system audio) and Accessibility permissions. Restart LocalLink after granting Screen Recording.
 4. Click **Start sharing this Mac**, then **Copy key**. Keep the host awake, signed in, and LocalLink running. LocalLink prevents idle system sleep while sharing; it does not bypass the lock screen, FileVault login, or a closed laptop lid.

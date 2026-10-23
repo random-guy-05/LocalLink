@@ -175,7 +175,10 @@ enum PicturePreset: String, CaseIterable { case smooth = "Smooth", sharp = "Shar
             let key = try PairingKey.decode(hostKey)
             let listener = try NWListener(using: LinkTLS.parameters(key: key), on: NWEndpoint.Port(rawValue: port)!)
             self.listener = listener; hosting = true; hostStatus = "Starting secure listener…"; error = nil
-            listener.newConnectionHandler = { [weak self] connection in Task { @MainActor in self?.accept(connection) } }
+            listener.newConnectionHandler = { [weak self, weak listener] connection in Task { @MainActor in
+                guard let self, self.listener === listener else { connection.cancel(); return }
+                self.accept(connection)
+            } }
             listener.stateUpdateHandler = { [weak self] state in Task { @MainActor in
                 guard self?.listener === listener else { return }
                 switch state { case .ready: self?.hostStatus = "Waiting for your other Mac · port \(self?.port ?? 48100)"; case .failed(let error): self?.error = error.localizedDescription; self?.stopHosting(); default: break }
