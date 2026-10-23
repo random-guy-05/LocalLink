@@ -4,7 +4,7 @@
 
 A native remote desktop app for your own Macs. **LocalLink handles capture, video encoding and decoding, system sound, and mouse and keyboard control itself.** No Parsec, Sunshine, Moonlight, browser runtime, or streaming server application is required. Tailscale provides the private connection between your Macs.
 
-**[Download the native engine preview](https://github.com/random-guy-05/LocalLink/releases/tag/v0.5.0)** · macOS 14+ · Intel and Apple Silicon
+**[Download the native engine preview](https://github.com/random-guy-05/LocalLink/releases/tag/v0.5.1)** · macOS 14+ · Intel and Apple Silicon
 
 ![LocalLink native dashboard](assets/preview.png)
 
@@ -12,7 +12,7 @@ Version 0.5 improves the working native engine with a redesigned workspace, nati
 
 ## Install on both Macs
 
-1. Download `LocalLink-0.5.0-universal.dmg`, open it, and drag LocalLink to Applications on **both** Macs.
+1. Download `LocalLink-0.5.1-universal.dmg`, open it, and drag LocalLink to Applications on **both** Macs.
 2. Keep [Tailscale](https://tailscale.com/download/mac) connected on both Macs.
 3. On the host Mac, open LocalLink → **This Mac**. Give **LocalLink** Screen Recording (screen and system audio) and Accessibility permissions. Restart LocalLink after granting Screen Recording.
 4. Click **Start sharing this Mac**, then **Copy key**. Keep the host awake, signed in, and LocalLink running. LocalLink prevents idle system sleep while sharing; it does not bypass the lock screen, FileVault login, or a closed laptop lid.
@@ -76,6 +76,16 @@ DMGBUILD=.venv/bin/dmgbuild bash release.sh
 ```
 
 The release includes a SHA-256 checksum. Personal addresses, pairing keys and local settings are never bundled.
+
+## Permission recovery in 0.5.1
+
+Legacy `CGPreflightScreenCaptureAccess` results are advisory and never block starting the host listener. The real ScreenCaptureKit capture operation enforces screen authorization; **This Mac → Test screen access** checks ScreenCaptureKit directly. Successful verification survives a false legacy preflight. Accessibility is checked independently: unavailable Accessibility allows an explicitly labelled view-only stream, while input injection continues to require macOS trust. Its status updates on an active viewer when the host’s trust changes.
+
+A real capture denial is delivered to the viewer before the host closes its channel. Terminal permission errors stop retries and display the actual failure and recovery steps; they are not converted into an indefinite reconnection spinner.
+
+These builds are ad-hoc signed. An update changes the signing identity macOS uses for privacy authorization, so System Settings can still display an allowed entry for an older build. If the actual capture test reports denial on the mini: quit LocalLink, remove its old entry from **Screen & System Audio Recording**, add the current `/Applications/LocalLink.app` and enable it; do the same in **Accessibility**, then reopen LocalLink and start sharing. Use the installed app shown in the permission panel’s Running path. Existing keys remain unchanged. Developer ID signing remains unresolved; this patch does not grant or bypass OS permissions.
+
+Tests exercise a real encrypted host listener with injected false advisory flags and separately verify delivery of a terminal host permission error to the native viewer. They do not assert that macOS authorized screen capture on the user’s mini.
 
 ## Persistence and key reuse
 

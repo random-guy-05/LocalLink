@@ -14,7 +14,7 @@ if [[ "${LOCALLINK_SKIP_HARDWARE_TEST:-0}" != "1" ]]; then
 fi
 
 /usr/bin/xcrun swiftc "$task_source/Native/Transport.swift" "$task_source/Native/Experience.swift" \
-  "$task_source/Native/Model.swift" "$task_source/Native/Control.swift" \
+  "$task_source/Native/Model.swift" "$task_source/Native/Permissions.swift" "$task_source/Native/Control.swift" \
   "$task_source/Native/Video.swift" "$task_source/Native/Audio.swift" "$task_source/Tests/SessionRegression.swift" \
   -parse-as-library -o "$task_scratch/native-session"
 "$task_scratch/native-session"

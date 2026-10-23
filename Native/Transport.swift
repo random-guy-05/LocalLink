@@ -126,6 +126,19 @@ final class LinkChannel {
             queue.asyncAfter(deadline: .now() + 1) { [weak self] in self?.finish("Disconnected") }
         }
     }
+    /// Keep a terminal error alive until the peer closes, acknowledges it with
+    /// goodbye, or the deadline expires. Cancelling directly after send can drop it.
+    func endWithStatus(_ status: HostStatus) {
+        queue.async { [self] in
+            guard !closed else { return }
+            closing = true; closeHold = self; onReady = nil
+            onPacket = { [weak self] packet in
+                if packet.kind == .goodbye { self?.send(.goodbyeAck) { self?.cancel() } }
+            }
+            sendJSON(.status, status)
+            queue.asyncAfter(deadline: .now() + 2) { [weak self] in self?.finish("Session ended") }
+        }
+    }
     func cancel() { queue.async { [self] in finish("Disconnected") } }
     private func finish(_ reason: String) {
         guard !closed else { return }; closed = true
@@ -161,7 +174,7 @@ struct StreamRequest: Codable {
     var audio = true
     var valid: Bool { version == 1 && (640...5120).contains(width) && (360...3200).contains(height) && (15...60).contains(fps) && (4...120).contains(mbps) }
 }
-struct HostStatus: Codable { var text: String; var width: Int; var height: Int; var codec: String; var retryable: Bool? = nil }
+struct HostStatus: Codable { var text: String; var width: Int; var height: Int; var codec: String; var retryable: Bool? = nil; var controlAvailable: Bool? = nil }
 struct RemoteInput: Codable {
     var kind: String
     var x: Double = 0

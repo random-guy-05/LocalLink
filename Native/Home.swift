@@ -114,7 +114,13 @@ struct NativeHome: View {
                 permission("Screen & system audio", "Capture your desktop and sound.", "rectangle.inset.filled", model.screenAllowed, model.screenPermission)
                 Divider()
                 permission("Accessibility", "Control your mouse and keyboard.", "cursorarrow", model.inputAllowed, model.inputPermission)
-                Text("Enable LocalLink in both panels. Quit and reopen after granting screen recording.").font(.system(size: 11)).foregroundStyle(muted)
+                HStack {
+                    Text(model.screenVerified ? "Screen access verified by ScreenCaptureKit." : "A preflight result never blocks sharing. Test the capture API directly.").font(.system(size: 11)).foregroundStyle(muted)
+                    Spacer()
+                    Button(model.screenChecking ? "Checking…" : "Test screen access") { model.verifyScreenAccess() }.disabled(model.screenChecking)
+                }
+                Text("After an update, macOS may still list the old build. If actual capture is denied, quit LocalLink, remove the old entry, add the installed app again, then reopen.").font(.system(size: 10)).foregroundStyle(muted).lineSpacing(3)
+                Text("Running: \(Bundle.main.bundleURL.path)").font(.system(size: 10, design: .monospaced)).foregroundStyle(.tertiary).textSelection(.enabled)
             }.padding(22).surface()
             VStack(alignment: .leading, spacing: 16) {
                 HStack { section("PAIRING KEY"); Spacer(); Text("Saved in Keychain").font(.system(size: 10)).foregroundStyle(muted) }

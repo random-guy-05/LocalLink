@@ -39,7 +39,7 @@ struct LocalLinkNativeApp: App {
     @MainActor static func main() {
         let args = CommandLine.arguments
         if args.contains("--engine-info") {
-            print("LocalLink 0.5.0 native preview\nCapture: ScreenCaptureKit\nVideo: VideoToolbox hardware H.264 / HEVC\nSound: ScreenCaptureKit + AVAudioEngine\nInput: CoreGraphics\nNetwork: Network.framework TLS 1.2 PSK AES-128-GCM, port 48100\nExternal streaming applications: none")
+            print("LocalLink 0.5.1 native preview\nCapture: ScreenCaptureKit\nVideo: VideoToolbox hardware H.264 / HEVC\nSound: ScreenCaptureKit + AVAudioEngine\nInput: CoreGraphics\nNetwork: Network.framework TLS 1.2 PSK AES-128-GCM, port 48100\nExternal streaming applications: none")
             return
         }
         if let index = args.firstIndex(of: "--render-preview"), index + 1 < args.count {

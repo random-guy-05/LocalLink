@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import ScreenCaptureKit
 
 @main enum ExperienceTests {
     @MainActor static func eventually(_ predicate: () -> Bool, timeout: TimeInterval = 15) async throws {
@@ -54,7 +55,51 @@ import Network
         fixture.close(); listener.cancel()
         model.shutdown()
         print("PASS: explicit disconnect cancels reconnection; no Keychain writes, capture or input injection")
+
+        let advisoryHost = NativeModel(preview: true, port: 0, permissionReader: { HostPermissions.Snapshot(screen: false, input: false) })
+        advisoryHost.hostKey = keyText
+        advisoryHost.startHosting()
+        try await eventually { (advisoryHost.listeningPort ?? 0) > 0 }
+        precondition(!advisoryHost.screenAllowed && !advisoryHost.inputAllowed && advisoryHost.hosting)
+        let reachable = DispatchSemaphore(value: 0)
+        let probe = LinkChannel(host: "127.0.0.1", port: advisoryHost.listeningPort!, key: key)
+        probe.onReady = { probe.send(.ping, Data("host-ready".utf8)) }
+        probe.onPacket = { packet in if packet.kind == .pong { reachable.signal() } }
+        probe.start()
+        try await eventually { reachable.wait(timeout: .now()) == .success }
+        probe.cancel(); advisoryHost.stopHosting(); advisoryHost.shutdown()
+        print("PASS: false legacy screen/Accessibility preflights do not block the actual secure host listener; capture was not invoked")
+
+        // Use the framework's exported domain rather than depending on its textual spelling.
+        let realDenied = NSError(domain: SCStreamErrorDomain, code: -3801)
+        precondition(HostPermissions.message(for: realDenied).contains("old entry"))
+        let failureListener = try NWListener(using: LinkTLS.parameters(key: key), on: .any)
+        let failureFixture = StatusFailureFixture()
+        failureListener.newConnectionHandler = { failureFixture.accept($0) }
+        failureListener.start(queue: DispatchQueue(label: "test.host-error"))
+        try await eventually { (failureListener.port?.rawValue ?? 0) > 0 }
+        let failedViewer = NativeModel(preview: true, port: failureListener.port!.rawValue)
+        failedViewer.host = "127.0.0.1"; failedViewer.viewerKey = keyText
+        failedViewer.connect()
+        try await eventually { failedViewer.error != nil }
+        precondition(failedViewer.error == "Screen Recording denied by the host" && !failedViewer.wantsConnection && !failedViewer.reconnecting)
+        try await Task.sleep(nanoseconds: 1_200_000_000)
+        precondition(!failedViewer.connecting && !failedViewer.wantsConnection)
+        failedViewer.shutdown(); failureListener.cancel(); failureFixture.close()
+        print("PASS: terminal host permission error reaches the viewer and stops the infinite retry spinner")
     }
+}
+
+final class StatusFailureFixture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var channels: [LinkChannel] = []
+    func accept(_ connection: NWConnection) {
+        let channel = LinkChannel(connection)
+        lock.withLock { channels.append(channel) }
+        channel.onPacket = { packet in if packet.kind == .hello { channel.endWithStatus(HostStatus(text: "Screen Recording denied by the host", width: 0, height: 0, codec: "", retryable: false)) } }
+        channel.start()
+    }
+    func close() { lock.withLock { channels }.forEach { $0.cancel() } }
 }
 
 final class SessionHostFixture: @unchecked Sendable {

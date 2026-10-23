@@ -3,6 +3,7 @@ import SwiftUI
 import Network
 import Security
 import ServiceManagement
+import ScreenCaptureKit
 
 enum SecretStore {
     private static func query(_ account: String) -> [String: Any] { [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "local.locallink.native", kSecAttrAccount as String: account] }
@@ -62,6 +63,10 @@ enum NativePage: String, CaseIterable { case connect = "Computers", host = "This
     @Published var hostConnected = false
     @Published var screenAllowed = false
     @Published var inputAllowed = false
+    @Published var screenChecking = false
+    @Published var screenVerified = false
+    @Published var remoteControlAvailable = true
+    @Published var listeningPort: UInt16?
     @Published var fps = 0
     @Published var bitrate = 0.0
     @Published var rtt: Double?
@@ -75,6 +80,7 @@ enum NativePage: String, CaseIterable { case connect = "Computers", host = "This
     private var listener: NWListener?
     private var hostChannels: [UUID: LinkChannel] = [:]
     private var activeHost: UUID?
+    private var hostVideoStatus: HostStatus?
     private var capture: NativeCapture?
     private let injector = InputInjector()
     private var captureStart: Task<Void, Never>?
@@ -98,10 +104,12 @@ enum NativePage: String, CaseIterable { case connect = "Computers", host = "This
     private var sessionID = UUID()
     private var sleepAssertion: IOPMAssertionID = 0
     private let preview: Bool
+    private let permissionReader: () -> HostPermissions.Snapshot
 
-    init(preview: Bool = false, port: UInt16 = 48100) {
+    init(preview: Bool = false, port: UInt16 = 48100, permissionReader: @escaping () -> HostPermissions.Snapshot = HostPermissions.snapshot) {
         self.preview = preview
         self.port = port
+        self.permissionReader = permissionReader
         let support = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/LocalLink/host")
         host = UserDefaults.standard.string(forKey: "nativeHost") ?? ((try? String(contentsOf: support, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
         if !preview {
@@ -151,7 +159,29 @@ enum NativePage: String, CaseIterable { case connect = "Computers", host = "This
         } catch { self.error = error.localizedDescription }
     }
     var hostValid: Bool { !host.isEmpty && host.count < 254 && host.unicodeScalars.allSatisfy { CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.:-").contains($0) } }
-    func refreshPermissions() { screenAllowed = CGPreflightScreenCaptureAccess(); inputAllowed = AXIsProcessTrusted() }
+    func refreshPermissions() {
+        let value = permissionReader()
+        let inputChanged = inputAllowed != value.input
+        screenAllowed = screenVerified || value.screen; inputAllowed = value.input
+        if inputChanged, hostConnected, let id = activeHost, var status = hostVideoStatus {
+            status.controlAvailable = inputAllowed; hostVideoStatus = status
+            hostChannels[id]?.sendJSON(.status, status)
+        }
+    }
+    func verifyScreenAccess() {
+        guard !screenChecking else { return }; screenChecking = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.screenChecking = false }
+            do {
+                _ = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+                self.screenVerified = true; self.screenAllowed = true; self.error = nil
+            } catch {
+                self.screenVerified = false; self.refreshPermissions()
+                self.error = HostPermissions.message(for: error)
+            }
+        }
+    }
     func screenPermission() { _ = CGRequestScreenCaptureAccess(); NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!); refreshPermissions() }
     func inputPermission() {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
@@ -205,6 +235,8 @@ enum NativePage: String, CaseIterable { case connect = "Computers", host = "This
                             if status.width == 0 { self.loseConnection(status.text, retryAllowed: status.retryable == true); return }
                             self.connecting = false; self.reconnecting = false; self.connected = true; self.retryAttempt = 0
                             self.status = "Connected"; self.error = nil; self.reconnectReason = nil
+                            self.remoteControlAvailable = status.controlAvailable ?? true
+                            self.status = self.remoteControlAvailable ? "Connected" : "Connected · view only (enable Accessibility on the host)"
                             self.resolution = "\(status.width) × \(status.height)"; self.codec = status.codec
                             self.lastHeartbeat = ProcessInfo.processInfo.systemUptime; self.pingTime = 0
                             self.sessionStarted = self.sessionStarted ?? Date()
@@ -234,7 +266,7 @@ enum NativePage: String, CaseIterable { case connect = "Computers", host = "This
             }
         } catch { loseConnection(error.localizedDescription, retryAllowed: false) }
     }
-    func send(_ input: RemoteInput) { guard connected, captureInput else { return }; viewer?.sendJSON(.input, input) }
+    func send(_ input: RemoteInput) { guard connected, captureInput, remoteControlAvailable else { return }; viewer?.sendJSON(.input, input) }
     func releaseInput() { viewer?.send(.releaseKeys) }
     func toggleInput() { releaseInput(); captureInput.toggle() }
     private func teardown(graceful: Bool, keepImage: Bool) {
@@ -248,7 +280,7 @@ enum NativePage: String, CaseIterable { case connect = "Computers", host = "This
     private func loseConnection(_ reason: String, retryAllowed: Bool = true) {
         guard wantsConnection else { return }
         reconnectReason = reason
-        teardown(graceful: false, keepImage: true)
+        teardown(graceful: !retryAllowed, keepImage: true)
         guard autoReconnect, retryAllowed else {
             wantsConnection = false; reconnecting = false; retryAt = nil; save(false, "resumeViewer")
             status = "Disconnected"; error = reason; return
@@ -286,8 +318,8 @@ enum NativePage: String, CaseIterable { case connect = "Computers", host = "This
         guard !hosting else { return }
         hostWanted = true
         refreshPermissions()
-        guard screenAllowed else { error = "Give LocalLink Screen Recording permission on this Mac, then quit and reopen LocalLink."; return }
-        guard inputAllowed else { error = "Give LocalLink Accessibility permission on this Mac to enable remote control."; return }
+        // Advisory checks must never prevent a real ScreenCaptureKit attempt.
+        // Accessibility controls input only; an unavailable input grant still allows viewing.
         if hostKey.isEmpty {
             do {
                 if let saved = try SecretStore.readChecked("host") { hostKey = saved }
@@ -304,7 +336,11 @@ enum NativePage: String, CaseIterable { case connect = "Computers", host = "This
             } }
             listener.stateUpdateHandler = { [weak self] state in Task { @MainActor in
                 guard self?.listener === listener else { return }
-                switch state { case .ready: self?.hostStatus = "Waiting for your other Mac · port \(self?.port ?? 48100)"; case .failed(let error): self?.error = error.localizedDescription; self?.recoverHost(); default: break }
+                switch state {
+                case .ready: self?.listeningPort = listener.port?.rawValue; self?.hostStatus = "Waiting for your other Mac"
+                case .failed(let error): self?.error = error.localizedDescription; self?.recoverHost()
+                default: break
+                }
             } }
             listener.start(queue: DispatchQueue(label: "LocalLink.host-listener"))
             IOPMAssertionCreateWithName(kIOPMAssertionTypePreventUserIdleSystemSleep as CFString, IOPMAssertionLevel(kIOPMAssertionLevelOn), "LocalLink host is available" as CFString, &sleepAssertion)
@@ -326,7 +362,8 @@ enum NativePage: String, CaseIterable { case connect = "Computers", host = "This
                 case .hello:
                     guard let channel, let request = try? JSONDecoder().decode(StreamRequest.self, from: packet.body), request.valid else { channel?.cancel(); return }
                     guard self.activeHost == nil else {
-                        channel.sendJSON(.status, HostStatus(text: "The previous session is still closing. Retrying shortly…", width: 0, height: 0, codec: "", retryable: true)) { channel.cancel() }
+                        self.removeHost(id, cancel: false)
+                        channel.endWithStatus(HostStatus(text: "The previous session is still closing. Retrying shortly…", width: 0, height: 0, codec: "", retryable: true))
                         return
                     }
                     self.hostHeartbeat = ProcessInfo.processInfo.systemUptime
@@ -354,30 +391,39 @@ enum NativePage: String, CaseIterable { case connect = "Computers", host = "This
         hostStatus = "Starting screen capture…"
         capture.onFailure = { [weak self] reason in Task { @MainActor in
             guard let self, self.activeHost == id else { return }
-            self.error = reason; channel.sendJSON(.status, HostStatus(text: reason, width: 0, height: 0, codec: "")); self.removeHost(id)
+            self.failHost(id, message: reason)
         } }
         captureStart = Task { @MainActor [weak self] in
             do {
                 await self?.hostCleanup?.value
                 try Task.checkCancellation()
-                let status = try await capture.start(request: request, channel: channel)
+                var status = try await capture.start(request: request, channel: channel)
                 guard let self, self.activeHost == id, !Task.isCancelled else { await capture.stop(); return }
                 self.injector.bounds = capture.displayBounds
+                self.screenVerified = true; self.screenAllowed = true
+                self.refreshPermissions(); status.controlAvailable = self.inputAllowed
+                self.hostVideoStatus = status
                 self.hostConnected = true; self.hostStatus = "Your other Mac is connected · \(status.codec)"
                 channel.sendJSON(.status, status)
             } catch {
                 guard let self, self.activeHost == id else { await capture.stop(); return }
-                self.error = error.localizedDescription
-                channel.sendJSON(.status, HostStatus(text: error.localizedDescription, width: 0, height: 0, codec: ""))
-                self.removeHost(id)
+                if error is CancellationError { self.removeHost(id); return }
+                self.screenVerified = false
+                self.failHost(id, message: HostPermissions.message(for: error))
             }
         }
+    }
+    private func failHost(_ id: UUID, message: String) {
+        guard let channel = hostChannels[id] else { return }
+        removeHost(id, cancel: false)
+        error = message; hostStatus = "Capture needs attention — see the message above"
+        channel.endWithStatus(HostStatus(text: message, width: 0, height: 0, codec: "", retryable: false))
     }
     private func removeHost(_ id: UUID, cancel: Bool = true) {
         let channel = hostChannels.removeValue(forKey: id)
         if cancel { channel?.cancel() }
         guard activeHost == id else { return }
-        activeHost = nil; hostConnected = false; injector.releaseAll(); captureStart?.cancel(); captureStart = nil
+        activeHost = nil; hostConnected = false; hostVideoStatus = nil; injector.releaseAll(); captureStart?.cancel(); captureStart = nil
         if let capture {
             let previous = hostCleanup
             hostCleanup = Task { @MainActor in await previous?.value; await capture.stop() }
@@ -398,6 +444,7 @@ enum NativePage: String, CaseIterable { case connect = "Computers", host = "This
         if remember { hostWanted = false; hostRetry?.cancel(); save(false, "resumeHost") }
         listener?.newConnectionHandler = nil; listener?.stateUpdateHandler = nil
         listener?.cancel(); listener = nil; hosting = false
+        listeningPort = nil
         for id in Array(hostChannels.keys) { removeHost(id) }
         injector.releaseAll(); hostConnected = false; hostStatus = "Sharing is off"
         if sleepAssertion != 0 { IOPMAssertionRelease(sleepAssertion); sleepAssertion = 0 }

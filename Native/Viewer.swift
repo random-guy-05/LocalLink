@@ -9,9 +9,12 @@ struct NativeViewer: View {
     @State private var hideTask: Task<Void, Never>?
     var body: some View {
         ZStack(alignment: .top) {
-            RemoteCanvas(presenter: model.presenter, scale: model.scale, inputEnabled: model.connected && model.captureInput, hideCursor: !hovering && model.captureInput, input: model.send, release: model.releaseInput, releaseShortcut: model.toggleInput).frame(maxWidth: .infinity, maxHeight: .infinity)
+            RemoteCanvas(presenter: model.presenter, scale: model.scale, inputEnabled: model.connected && model.captureInput && model.remoteControlAvailable, hideCursor: !hovering && model.captureInput && model.remoteControlAvailable, input: model.send, release: model.releaseInput, releaseShortcut: model.toggleInput).frame(maxWidth: .infinity, maxHeight: .infinity)
             if controls || hovering || !model.captureInput || !model.connected { toolbar.padding(.top, windowState.fullscreen ? 12 : 36).transition(.opacity.combined(with: .move(edge: .top))).zIndex(3) }
             if !model.connected { connectionOverlay.zIndex(2) }
+            if model.connected && !model.remoteControlAvailable {
+                VStack { Spacer(); Label("View only — enable LocalLink in Accessibility on the host Mac. If already enabled, remove the old entry, add the installed app again, and reopen it.", systemImage: "cursorarrow.slash").font(.system(size: 11)).foregroundStyle(.orange).padding(14).frame(maxWidth: 620).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12)).padding(18) }.allowsHitTesting(false)
+            }
             if model.showStats && model.connected {
                 VStack { Spacer(); HStack { Text("\(model.resolution)  ·  \(model.codec)  ·  \(model.fps) fps  ·  \(String(format: "%.1f", model.bitrate)) Mbps  ·  \(model.rtt.map { String(format: "%.0f ms RTT", $0) } ?? "— ms RTT")").font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.7)).padding(10).background(.ultraThinMaterial, in: Capsule()); Spacer() }.padding(16) }.allowsHitTesting(false)
             }
@@ -24,7 +27,7 @@ struct NativeViewer: View {
     }
     private var toolbar: some View {
         HStack(spacing: 13) {
-            HStack(spacing: 7) { Circle().fill(model.connected ? Color.green : Color.orange).frame(width: 6, height: 6); Text(model.computerName).font(.system(size: 11, weight: .medium)) }.padding(.leading, 4)
+            HStack(spacing: 7) { Circle().fill(model.connected ? Color.green : Color.orange).frame(width: 6, height: 6); Text(model.computerName).font(.system(size: 11, weight: .medium)); if model.connected && !model.remoteControlAvailable { Text("View only").font(.system(size: 10)).foregroundStyle(.orange) } }.padding(.leading, 4)
             Divider().frame(height: 19)
             Menu { ForEach(DesktopScale.allCases, id: \.self) { scale in Button { model.scale = scale } label: { if model.scale == scale { Label(scale.rawValue, systemImage: "checkmark") } else { Text(scale.rawValue) } } } } label: { Label(model.scale.rawValue, systemImage: "rectangle.arrowtriangle.2.outward") }.menuStyle(.borderlessButton).fixedSize().help("Desktop scaling")
             Button { model.showStats.toggle() } label: { Image(systemName: "waveform.path.ecg") }.help("Connection statistics")
@@ -40,13 +43,14 @@ struct NativeViewer: View {
     private var connectionOverlay: some View {
         VStack(spacing: 17) {
             if model.wantsConnection { ProgressView().controlSize(.large) } else { Image(systemName: "desktopcomputer").font(.system(size: 34, weight: .light)).foregroundStyle(.secondary) }
-            Text(model.wantsConnection ? "Returning to your Mac…" : "Session ended").font(.system(size: 21, weight: .medium))
+            Text(model.error != nil && !model.wantsConnection ? "Host needs attention" : model.wantsConnection ? "Connecting to your Mac…" : "Session ended").font(.system(size: 21, weight: .medium))
             Text(model.wantsConnection ? "Your connection will resume automatically." : "Your pairing key is saved. Connect again whenever you’re ready.").font(.system(size: 12)).foregroundStyle(.secondary)
             HStack(spacing: 14) {
                 if model.wantsConnection { Button("Try now") { model.retryNow() }.disabled(model.connecting); Button("Disconnect") { model.disconnect() } }
                 else { Button("Reconnect") { model.connect() }.buttonStyle(.borderedProminent).tint(accent); Button("Open LocalLink") { openWindow(id: "workspace") } }
             }.padding(.top, 4)
-            if let error = model.error { Text(error).font(.system(size: 11)).foregroundStyle(.orange).frame(maxWidth: 420) }
+            if let error = model.error { Text(error).font(.system(size: 11)).foregroundStyle(.orange).textSelection(.enabled).frame(maxWidth: 460).fixedSize(horizontal: false, vertical: true) }
+            else if let reason = model.reconnectReason, model.wantsConnection { Text(reason).font(.system(size: 11)).foregroundStyle(.secondary).frame(maxWidth: 460).fixedSize(horizontal: false, vertical: true) }
         }.padding(32).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20)).frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     private func reveal() {
