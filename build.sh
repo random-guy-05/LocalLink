@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 task_root="$(cd "$(dirname "$0")" && pwd)"
-task_version="0.4.1"
+task_version="0.5.0"
 task_arches="${LOCALLINK_ARCHS:-$(uname -m)}"
 task_app="$task_root/dist/LocalLink.app"
 task_build="$task_root/build"
@@ -28,7 +28,7 @@ cat > "$task_app/Contents/Info.plist" <<PLIST
 <key>CFBundleDisplayName</key><string>LocalLink</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>$task_version</string>
-<key>CFBundleVersion</key><string>5</string>
+<key>CFBundleVersion</key><string>6</string>
 <key>CFBundleIconFile</key><string>LocalLink</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>

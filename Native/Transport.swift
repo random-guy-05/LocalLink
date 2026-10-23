@@ -49,7 +49,7 @@ enum LinkTLS {
     }
 }
 
-enum PacketKind: UInt8 { case hello = 1, video = 2, input = 3, status = 4, ping = 5, pong = 6, audio = 7, releaseKeys = 8 }
+enum PacketKind: UInt8 { case hello = 1, video = 2, input = 3, status = 4, ping = 5, pong = 6, audio = 7, releaseKeys = 8, goodbye = 9, goodbyeAck = 10 }
 
 struct WirePacket {
     static let limit = 8 * 1024 * 1024
@@ -84,6 +84,8 @@ final class LinkChannel {
     var onClose: ((String) -> Void)?
     private var closed = false
     private var ready = false
+    private var closing = false
+    private var closeHold: LinkChannel?
     init(_ connection: NWConnection) { self.connection = connection }
     convenience init(host: String, port: UInt16, key: Data) { self.init(NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!, using: LinkTLS.parameters(key: key))) }
     func start() {
@@ -103,20 +105,33 @@ final class LinkChannel {
         }
     }
     func send(_ kind: PacketKind, _ data: Data = Data(), completion: (() -> Void)? = nil) {
-        queue.async { [weak self] in
-            guard let self, !self.closed, data.count < WirePacket.limit else { completion?(); return }
+        queue.async { [self] in
+            guard !closed, data.count < WirePacket.limit else { completion?(); return }
             self.connection.send(content: WirePacket(kind: kind, body: data).framed, completion: .contentProcessed { [weak self] error in
                 completion?()
                 if let error { self?.finish(error.localizedDescription) }
             })
         }
     }
-    func sendJSON<T: Encodable>(_ kind: PacketKind, _ value: T) { if let data = try? JSONEncoder().encode(value) { send(kind, data) } }
-    func cancel() { queue.async { [weak self] in self?.finish("Disconnected") } }
+    func sendJSON<T: Encodable>(_ kind: PacketKind, _ value: T, completion: (() -> Void)? = nil) { if let data = try? JSONEncoder().encode(value) { send(kind, data, completion: completion) } }
+    /// Let the host release its session before closing TCP. Older peers close on the
+    /// unknown goodbye packet; an acknowledgement or timeout always completes cleanup.
+    func endSession(cleanup: @escaping () -> Void) {
+        queue.async { [self] in
+            guard !closed, ready, !closing else { cleanup(); finish("Disconnected"); return }
+            closing = true; closeHold = self; onReady = nil
+            onPacket = { [weak self] packet in if packet.kind == .goodbyeAck { self?.finish("Disconnected") } }
+            cleanup()
+            send(.goodbye)
+            queue.asyncAfter(deadline: .now() + 1) { [weak self] in self?.finish("Disconnected") }
+        }
+    }
+    func cancel() { queue.async { [self] in finish("Disconnected") } }
     private func finish(_ reason: String) {
         guard !closed else { return }; closed = true
         connection.cancel(); onClose?(reason)
         onReady = nil; onPacket = nil; onClose = nil
+        closeHold = nil
     }
     private func receiveHeader() {
         guard !closed else { return }
@@ -144,9 +159,9 @@ struct StreamRequest: Codable {
     var mbps = 28
     var hevc = true
     var audio = true
-    var valid: Bool { version == 1 && (640...3840).contains(width) && (360...2160).contains(height) && (15...60).contains(fps) && (4...80).contains(mbps) }
+    var valid: Bool { version == 1 && (640...5120).contains(width) && (360...3200).contains(height) && (15...60).contains(fps) && (4...120).contains(mbps) }
 }
-struct HostStatus: Codable { var text: String; var width: Int; var height: Int; var codec: String }
+struct HostStatus: Codable { var text: String; var width: Int; var height: Int; var codec: String; var retryable: Bool? = nil }
 struct RemoteInput: Codable {
     var kind: String
     var x: Double = 0

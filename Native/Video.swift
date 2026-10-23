@@ -18,7 +18,7 @@ struct VideoFrame {
         data.append(bytes); return data
     }
     static func decode(_ data: Data) throws -> VideoFrame {
-        guard data.count > 6, data[0] <= 1, let width: UInt16 = data.integer(at: 1), let height: UInt16 = data.integer(at: 3), width >= 16, width <= 3840, height >= 16, height <= 2160 else { throw LinkError.message("Invalid video dimensions.") }
+        guard data.count > 6, data[0] <= 1, let width: UInt16 = data.integer(at: 1), let height: UInt16 = data.integer(at: 3), width >= 16, width <= 5120, height >= 16, height <= 3200 else { throw LinkError.message("Invalid video dimensions.") }
         let count = Int(data[5]), hevc = data[0] == 1
         guard count == (hevc ? 3 : 2) else { throw LinkError.message("Invalid video format.") }
         var offset = 6, parameters: [Data] = []
@@ -90,6 +90,10 @@ final class NativeEncoder {
             let result = VTSessionSetProperty(session, key: key, value: value as CFTypeRef)
             guard result == noErr else { stop(); throw LinkError.message("Hardware encoder rejected a required setting (\(result)).") }
         }
+        // Optional quality hints: unsupported hints must not reject an otherwise
+        // compatible hardware encoder. Real-time and no frame reordering stay required.
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_Quality, value: NSNumber(value: 0.9))
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_PrioritizeEncodingSpeedOverQuality, value: kCFBooleanFalse)
         let prepared = VTCompressionSessionPrepareToEncodeFrames(session)
         guard prepared == noErr else { stop(); throw LinkError.message("Hardware encoder could not start (\(prepared)).") }
     }
@@ -170,9 +174,11 @@ final class NativeCapture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
         guard stopTask == nil else { throw CancellationError() }
         guard let display = content.displays.first else { throw LinkError.message("No display is attached to the host Mac.") }
         displayBounds = CGDisplayBounds(display.displayID)
-        let aspect = Double(display.width) / Double(display.height)
-        let width = min(request.width, Int(Double(request.height) * aspect)) / 2 * 2
-        let height = Int(Double(width) / aspect) / 2 * 2
+        let filter = SCContentFilter(display: display, excludingWindows: [])
+        let source = CGSize(width: filter.contentRect.width * CGFloat(filter.pointPixelScale), height: filter.contentRect.height * CGFloat(filter.pointPixelScale))
+        let size = DisplayGeometry.capture(source: source, maximum: CGSize(width: request.width, height: request.height))
+        guard size.width >= 16, size.height >= 16 else { throw LinkError.message("The display reported an invalid capture size.") }
+        let width = Int(size.width), height = Int(size.height)
         let encoder = try NativeEncoder(width: width, height: height, request: request)
         self.encoder = encoder; self.channel = channel
         encoder.onFrame = { [weak self, weak channel] frame in
@@ -183,6 +189,7 @@ final class NativeCapture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
         encoder.onFailure = { [weak self] reason in self?.permits.signal(); self?.onFailure?(reason) }
         encoder.onDrop = { [weak self] in self?.permits.signal() }
         let configuration = SCStreamConfiguration()
+        configuration.captureResolution = .best
         configuration.width = width; configuration.height = height
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(request.fps))
         configuration.queueDepth = 3
@@ -192,7 +199,7 @@ final class NativeCapture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
         configuration.capturesAudio = request.audio
         configuration.excludesCurrentProcessAudio = true
         configuration.sampleRate = 48000; configuration.channelCount = 2
-        let stream = SCStream(filter: SCContentFilter(display: display, excludingWindows: []), configuration: configuration, delegate: self)
+        let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
         self.stream = stream
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
         if request.audio { try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: sampleQueue) }
