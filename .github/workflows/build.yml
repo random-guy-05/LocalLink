@@ -14,9 +14,9 @@ jobs:
         env:
           LOCALLINK_ARCHS: x86_64 arm64
         run: bash build.sh
-      - name: Run core regressions
+      - name: Test encrypted native transport
         env:
-          LOCALLINK_SKIP_ENGINE_CHECK: '1'
+          LOCALLINK_SKIP_HARDWARE_TEST: '1'
         run: bash test.sh
       - name: Verify bundle
         run: codesign --verify --deep --strict dist/LocalLink.app

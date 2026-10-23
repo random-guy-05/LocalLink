@@ -2,66 +2,70 @@
 
 # LocalLink
 
-A native macOS workspace for connecting to your own Mac through Moonlight, Sunshine, and Tailscale. Independent of Parsec.
+A native remote desktop app for your own Macs. **LocalLink handles capture, video encoding and decoding, system sound, and mouse and keyboard control itself.** No Parsec, Sunshine, Moonlight, browser runtime, or streaming server application is required. Tailscale provides the private connection between your Macs.
 
-**[Download the macOS preview](https://github.com/random-guy-05/LocalLink/releases/tag/v0.3.0)** · macOS 14+ · Intel and Apple Silicon
+**[Download the native engine preview](https://github.com/random-guy-05/LocalLink/releases/tag/v0.4.0)** · macOS 14+ · Intel and Apple Silicon
 
-![LocalLink connection dashboard](assets/preview.png)
+![LocalLink native dashboard](assets/preview.png)
 
-## What it does
+Version 0.4 replaces the third-party streaming stack used by 0.3. It is an early native-engine preview, not a verified replacement for a mature remote desktop product. End-to-end streaming, permissions, audio and input on a physical host still need testing. No claim of Parsec-level latency or smoothness is made.
 
-- Native SwiftUI dashboard, picture controls, connection diagnostics, setup flow, menu bar controls, and keyboard shortcuts.
-- Smooth, Sharper, and Travel profiles, with configurable bitrate, resolution, frame rate, codec, frame pacing, and pointer behavior.
-- VideoToolbox hardware decode availability checks and an option to require hardware decoding.
-- Actual Tailscale route and round-trip measurements, bounded engine logs, diagnostic exports, and recent viewer sessions.
-- Temporary SSH authentication, a verified Sunshine host installer, and a private dashboard tunnel.
+## Install on both Macs
 
-Moonlight performs the streaming, decoding, and input transport. Sunshine hosts the remote desktop. LocalLink is a custom controller for those components; it does not replace their video codecs or streaming protocol.
+1. Download `LocalLink-0.4.0-universal.dmg`, open it, and drag LocalLink to Applications on **both** Macs.
+2. Keep [Tailscale](https://tailscale.com/download/mac) connected on both Macs.
+3. On the host Mac, open LocalLink → **Share this Mac**. Give **LocalLink** Screen Recording (screen and system audio) and Accessibility permissions. Restart LocalLink after granting Screen Recording.
+4. Click **Start sharing this Mac**, then **Copy key**. Keep the host awake, signed in, and LocalLink running. LocalLink prevents idle system sleep while sharing; it does not bypass the lock screen, FileVault login, or a closed laptop lid.
+5. On the viewing Mac, enter the host’s Tailscale IP or hostname and paste its pairing key. Click **Connect to Mac**.
+6. Click the picture in the remote desktop window for input. Use the toolbar for full screen; Command–Shift–D disconnects. Closing the viewer disconnects it. Stop sharing on the host to make it unavailable.
 
-## Install
+There is no Sunshine dashboard, Moonlight pairing, SSH password, or additional host service. Permissions previously given to another app do not apply to LocalLink.
 
-1. Download `LocalLink-0.3.0-universal.dmg` from the release page.
-2. Open the DMG and drag **LocalLink** into **Applications**.
-3. Install [Moonlight](https://moonlight-stream.org/) and [Tailscale](https://tailscale.com/download/mac) separately on the viewing Mac.
-4. Open LocalLink and enter your host's Tailscale IP or hostname under **Setup**.
+This preview is ad-hoc signed and **not Apple-notarized**. If macOS blocks the downloaded app, use [Apple’s Privacy & Security → Open Anyway process](https://support.apple.com/102445). Developer ID signing and notarization remain future release work.
 
-This preview is ad-hoc signed and **not Apple-notarized**. If macOS blocks the downloaded app, follow [Apple's documented Privacy & Security → Open Anyway process](https://support.apple.com/102445). It does not require disabling Gatekeeper. A Developer ID certificate and notarization are needed for a normal verified-developer download experience.
+## Native engine
 
-The DMG contains LocalLink and its guide. It does not bundle Moonlight, Sunshine, Tailscale, personal host addresses, SSH keys, or account credentials.
+| Component | Implementation |
+| --- | --- |
+| Screen and system sound | Apple ScreenCaptureKit |
+| H.264 / HEVC encode and decode | Apple VideoToolbox, hardware required |
+| Video presentation | AVSampleBufferDisplayLayer, with a bounded latest decoded surface |
+| Stereo audio | 48 kHz float PCM through AVAudioEngine; no audio driver installation |
+| Mouse and keyboard | CoreGraphics events, gated by Accessibility |
+| Secure transport | Apple Network.framework, TLS 1.2 PSK AES-128-GCM over TCP |
+| Internet reachability | Your existing Tailscale connection; port 48100 |
+| Pairing secrets | 256-bit system randomness, stored in macOS Keychain |
+| Interface | SwiftUI and AppKit |
 
-## Set up the host
+Each TLS connection authenticates the pairing key. TLS session resumption and tickets are disabled so old authenticated sessions cannot bypass a changed key. The TLS PSK identity is bound to the key. No self-signed certificate bypass, plaintext fallback, telemetry, hosted account, or public signaling service is used. This PSK suite does not provide forward secrecy by itself; Tailscale supplies an additional encrypted network layer.
 
-The host setup helper requires a Mac running macOS 14.2+ with Tailscale connected. Install [Sunshine](https://docs.lizardbyte.dev/projects/sunshine/latest/) on it, or use LocalLink's **Authenticate SSH → Install on mini** flow. SSH requires Remote Login enabled for the host account.
+The host accepts one streaming viewer at a time, caps pending handshakes, validates protocol version and stream bounds, bounds packets before allocation, releases pressed keys on disconnection/focus loss, and stops capture when the viewer leaves. Treat the pairing key as remote-control access: anyone with it can connect while sharing is on. **New pairing key** revokes the old key. The host listener can bind to interfaces beyond Tailscale; restrict port 48100 with your firewall if required. Do not forward it publicly.
 
-Passwords are entered privately in Terminal and are not stored by LocalLink. A temporary SSH connection expires after ten idle minutes. Host addresses, SSH trust, and the account short name are saved only in the current user's Application Support directory. Changing the configured host invalidates setup authentication for the previous host.
+## Picture and performance
 
-On the host, allow Sunshine's screen recording, audio access as requested, and Accessibility permissions. Restart Sunshine after granting permissions. Create its admin login, then use **Pair this Mac** and enter the displayed PIN on Sunshine's PIN page. The host needs to remain awake, signed in, and running Sunshine.
+- **Smooth:** up to 2560 × 1600, 60 fps, 28 Mbps.
+- **Sharper:** up to 3840 × 2160, 60 fps, 50 Mbps.
+- **Travel:** up to 1920 × 1080, 60 fps, 10 Mbps.
+- HEVC is the default. Switch it off for hardware H.264 compatibility.
+- Host display proportions are preserved. These are requested upper bounds, not guaranteed delivered frame rates or resolutions. No virtual display is created.
+- The host skips raw capture frames before encoding when transmission is busy; the viewer can replace decoded surfaces awaiting presentation. Compressed inter-frame references are not discarded.
+- The toolbar measures decoded surfaces passed to the renderer, encoded video throughput and connection round trips. The FPS count is not a display scanout measurement; RTT is not click-to-photon latency. Audio bandwidth is additional (about 3.1 Mbps of uncompressed stereo).
 
-The fresh host configuration disables UPnP and keeps its administration page on localhost. The app can open that page through a local SSH tunnel. Existing Sunshine installations and settings are preserved.
+Current limits: one display (the first capture display), one viewer, SDR 8-bit 4:2:0, no clipboard/file transfer, no HDR/4:4:4, no multi-monitor selector, and no automatic launch or reconnection. TCP can stall on packet loss; adaptive bitrate and a datagram transport remain future work. Audio uses a small bounded buffer without adaptive A/V clock synchronization. The app cannot promise a near-native experience on every internet connection.
 
-## Performance
+## Build and verify
 
-Smooth requests hardware decoding, V-Sync, and frame pacing at up to 60 fps. Sharper raises bitrate; Travel lowers resolution and bandwidth. Responsive mode disables V-Sync and frame pacing and can introduce tearing or uneven motion. Full-color 4:4:4 is opt-in and requires compatible hardware on both ends.
-
-Resolution matching uses the viewer's current Retina backing canvas, which may differ from the physical panel resolution when display scaling is active. It does not resize or create the host's display. No preset guarantees native-like latency or delivered FPS on every internet connection.
-
-The diagnostics chart reports **network round trips**, not video latency, bandwidth, or frame loss. Use Moonlight's in-stream overlay (`Control–Option–Shift–S`) for actual delivered FPS, dropped frames, and decoding time. Real host permissions, audio, input, and internet streaming still require a live test with your hardware.
-
-Network checks run every 20 seconds only while the app is foregrounded and idle. They pause during managed viewer sessions. There are no continuous UI animation loops, and engine logs are bounded.
-
-## Build
-
-Requires macOS 14+ and Apple's Command Line Tools. No Node runtime or web server is used.
+Requires Apple Command Line Tools on macOS 14+. No third-party runtime, package manager or dependency download is needed to build the app.
 
 ```sh
-bash build.sh                                      # Current architecture
-LOCALLINK_ARCHS="x86_64 arm64" bash build.sh         # Universal app
-bash test.sh                                       # Regression and installed-engine checks
+bash build.sh
+LOCALLINK_ARCHS="x86_64 arm64" bash build.sh
+bash test.sh
 ```
 
-Build output is `dist/LocalLink.app`. The build signs locally and replaces source-path prefixes in the binary. No private host configuration is read into release resources.
+`dist/LocalLink.app` is the universal app. Tests check encrypted loopback traffic, wrong-key rejection, binary and stream bounds, and synthetic hardware H.264/HEVC video round trips. Synthetic tests never capture the screen or inject input. GitHub CI compiles both architectures and runs the transport tests; its virtual machine skips hardware codec tests. Neither replaces a two-Mac session test.
 
-To create the styled DMG:
+To package the optional styled DMG (packaging-only Python dependency):
 
 ```sh
 python3 -m venv .venv
@@ -69,18 +73,8 @@ python3 -m venv .venv
 DMGBUILD=.venv/bin/dmgbuild bash release.sh
 ```
 
-`dist/` and `build/` are ignored by Git. The release includes SHA-256 checksums. A GitHub Actions build also compiles the universal app and runs the core regressions; it does not establish a live remote desktop session.
+The release includes a SHA-256 checksum. Personal addresses, pairing keys and local settings are never bundled.
 
-## Source layout
+## Source
 
-| File | Responsibility |
-| --- | --- |
-| `Core.swift` | Settings, migration, hardware checks, route parsing, host classification |
-| `Runtime.swift` | Bounded subprocess capture, timeouts, viewer ownership, disconnect cleanup |
-| `SessionModel.swift` | Session flow, diagnostics, private settings, host setup |
-| `Views.swift` | Native workspace pages and pairing sheet |
-| `LocalLink.swift` | App lifecycle, menu bar, keyboard shortcuts, internal UI renderer |
-| `Resources/` | Generic guide and setup helpers |
-| `Tests/` | Availability, validation, migration, process, and engine contract regressions |
-
-Third-party software is installed separately and retains its own licenses: [Moonlight](https://github.com/moonlight-stream/moonlight-qt), [Sunshine](https://github.com/LizardByte/Sunshine), and [Tailscale](https://github.com/tailscale/tailscale).
+`Native/Transport.swift` defines the secure channel and bounded protocol. `Video.swift` captures, encodes and decodes video. `Audio.swift` carries native stereo sound. `Control.swift` renders surfaces and handles input. `Model.swift` owns sessions, host lifecycle, permissions and Keychain. `App.swift` contains the native interface. Earlier streaming integrations remain available in Git history at tag `v0.3.0`.

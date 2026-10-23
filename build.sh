@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 task_root="$(cd "$(dirname "$0")" && pwd)"
-task_version="0.3.0"
+task_version="0.4.0"
 task_arches="${LOCALLINK_ARCHS:-$(uname -m)}"
 task_app="$task_root/dist/LocalLink.app"
 task_build="$task_root/build"
@@ -12,7 +12,7 @@ task_slices=()
 for task_arch in $task_arches; do
   case "$task_arch" in arm64|x86_64) ;; *) echo "Unsupported architecture: $task_arch" >&2; exit 1 ;; esac
   task_binary="$task_build/LocalLink-$task_arch"
-  /usr/bin/xcrun swiftc "$task_root"/*.swift -parse-as-library -O -module-name LocalLink \
+  /usr/bin/xcrun swiftc "$task_root"/Native/*.swift -parse-as-library -O -module-name LocalLink \
     -file-prefix-map "$task_root=/LocalLink" -debug-prefix-map "$task_root=/LocalLink" \
     -target "$task_arch-apple-macosx14.0" -o "$task_binary"
   task_slices+=("$task_binary")
@@ -28,17 +28,15 @@ cat > "$task_app/Contents/Info.plist" <<PLIST
 <key>CFBundleDisplayName</key><string>LocalLink</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>$task_version</string>
-<key>CFBundleVersion</key><string>3</string>
+<key>CFBundleVersion</key><string>4</string>
 <key>CFBundleIconFile</key><string>LocalLink</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>
-<key>NSLocalNetworkUsageDescription</key><string>Connect to your host Mac’s streaming service on your private network.</string>
+<key>NSScreenCaptureUsageDescription</key><string>Share this Mac’s screen and system sound with your paired LocalLink viewer.</string>
+<key>NSLocalNetworkUsageDescription</key><string>Connect directly to your other Mac for encrypted screen, sound, and input streaming.</string>
 </dict></plist>
 PLIST
 cp "$task_root/Resources/Start Here.html" "$task_app/Contents/Resources/"
-cp "$task_root/Resources/Authenticate Mac mini.command" "$task_app/Contents/Resources/"
-cp "$task_root/Resources/Set up Mac mini.command" "$task_app/Contents/Resources/"
-chmod +x "$task_app/Contents/Resources/"*.command
 task_icons="$task_build/LocalLink.iconset"
 mkdir -p "$task_icons" "$task_root/assets"
 /usr/bin/swift "$task_root/Tools/Icon.swift" "$task_build/icon.png"
