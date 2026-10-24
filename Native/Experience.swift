@@ -1,6 +1,14 @@
 import Foundation
 import CoreGraphics
 
+enum RuntimeCompatibility {
+    #if LOCALLINK_LEGACY
+    static let legacyAPIs = true
+    #else
+    static let legacyAPIs = false
+    #endif
+}
+
 enum PicturePreset: String, CaseIterable {
     case retina = "Retina", sharp = "Studio", smooth = "Balanced", travel = "Travel"
     var subtitle: String {

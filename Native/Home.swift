@@ -1,9 +1,9 @@
 import SwiftUI
 import AppKit
 
-struct NativeTray: View {
+@available(macOS 13.0, *) struct NativeTray: View {
     @ObservedObject var model: NativeModel
-    @Environment(\.openWindow) var openWindow
+    @Environment(\.localWindowAction) var openWindow
     var body: some View {
         Text(model.connected ? "\(model.computerName) · connected" : model.status)
         Button("Open LocalLink") { openWindow(id: "workspace"); NSApp.activate(ignoringOtherApps: true) }
@@ -16,7 +16,7 @@ struct NativeTray: View {
 
 struct NativeHome: View {
     @ObservedObject var model: NativeModel
-    @Environment(\.openWindow) var openWindow
+    @Environment(\.localWindowAction) var openWindow
     @State private var editing = false
     var body: some View {
         HStack(spacing: 0) {
@@ -38,7 +38,7 @@ struct NativeHome: View {
             }
         }.frame(minWidth: 980, minHeight: 720).background(ink).preferredColorScheme(.dark).tint(accent)
         .sheet(isPresented: $editing) { editor }
-        .onChange(of: model.wantsConnection) { _, wanted in if wanted { openWindow(id: "remote") } }
+        .onChange(of: model.wantsConnection) { wanted in if wanted { openWindow(id: "remote") } }
         .onAppear { if model.wantsConnection { openWindow(id: "remote") } }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in model.refreshPermissions() }
     }
@@ -129,6 +129,9 @@ struct NativeHome: View {
                 HStack { Text("Disconnecting keeps this key. Only “New key” replaces it.").font(.system(size: 11)).foregroundStyle(muted); Spacer(); Button("New key") { model.rotateKey() }.disabled(model.hosting) }
             }.padding(22).surface()
             Text("Sharing resumes when LocalLink reopens. Enable Open at login in Experience to make this Mac available after you sign in.").font(.system(size: 11)).foregroundStyle(muted).lineSpacing(4)
+            if #available(macOS 13.0, *) {} else {
+                Text("Monterey shares video and remote control. Capturing this Mac’s system audio requires macOS 13 or later. Sound from a newer host can still play on this Mac.").font(.system(size: 11)).foregroundStyle(muted).lineSpacing(4)
+            }
         }
     }
     private var experience: some View {
@@ -143,7 +146,11 @@ struct NativeHome: View {
                 setting("System audio", "Stream sound from your other Mac", "speaker.wave.2", $model.audio); Divider().padding(.leading, 50)
                 setting("Open in full screen", "A dedicated macOS Space, edge to edge", "arrow.up.left.and.arrow.down.right", $model.autoFullscreen); Divider().padding(.leading, 50)
                 setting("Reconnect automatically", "Resume after network changes and sleep", "arrow.triangle.2.circlepath", $model.autoReconnect); Divider().padding(.leading, 50)
-                setting("Open at login", model.loginApprovalNeeded ? "Approval needed in Login Items" : "Restore sharing and your last active connection", "power", Binding(get: { model.loginEnabled }, set: model.setLogin))
+                if #available(macOS 13.0, *) {
+                    setting("Open at login", model.loginApprovalNeeded ? "Approval needed in Login Items" : "Restore sharing and your last active connection", "power", Binding(get: { model.loginEnabled }, set: model.setLogin))
+                } else {
+                    HStack { Image(systemName: "power"); Text("Open at login: add LocalLink in System Preferences → Users & Groups → Login Items.").font(.system(size: 11)); Spacer() }.foregroundStyle(muted).padding(17)
+                }
             }.surface()
             Text("Picture changes apply on the next connection, or use Apply to session. Higher quality uses more bandwidth; available display pixels and hardware set the upper limit.").font(.system(size: 11)).foregroundStyle(muted).lineSpacing(4)
         }

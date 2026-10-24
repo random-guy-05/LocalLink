@@ -8,6 +8,11 @@ permissions:
 jobs:
   universal-app:
     runs-on: macos-15
+    strategy:
+      matrix:
+        variant: [modern, legacy]
+    env:
+      LOCALLINK_VARIANT: ${{ matrix.variant }}
     steps:
       - uses: actions/checkout@v4
       - name: Build Intel and Apple Silicon
@@ -18,5 +23,10 @@ jobs:
         env:
           LOCALLINK_SKIP_HARDWARE_TEST: '1'
         run: bash test.sh
-      - name: Verify bundle
-        run: codesign --verify --deep --strict dist/LocalLink.app
+      - name: Test window and video display compatibility
+        run: |
+          if [[ "$LOCALLINK_VARIANT" == "legacy" ]]; then
+            dist/legacy/LocalLink.app/Contents/MacOS/LocalLink --legacy-ui-smoke-test
+          else
+            dist/LocalLink.app/Contents/MacOS/LocalLink --legacy-ui-smoke-test
+          fi

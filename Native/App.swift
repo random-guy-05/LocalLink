@@ -12,12 +12,12 @@ let muted = Color.white.opacity(0.48)
     func applicationWillTerminate(_ notification: Notification) { model?.shutdown() }
 }
 
-struct LocalLinkNativeApp: App {
+@available(macOS 13.0, *) struct LocalLinkNativeApp: App {
     @NSApplicationDelegateAdaptor(NativeDelegate.self) var delegate
     @StateObject private var model = NativeModel()
     var body: some Scene {
         WindowGroup("LocalLink", id: "workspace") {
-            NativeHome(model: model)
+            ModernWindowContent { NativeHome(model: model) }
                 .background(StandardWindowBridge().frame(width: 0, height: 0))
                 .onAppear { delegate.model = model; model.startLifecycle() }
         }.defaultSize(width: 1100, height: 790).windowStyle(.titleBar)
@@ -32,8 +32,8 @@ struct LocalLinkNativeApp: App {
                 Button("Stop sharing this Mac") { model.stopHosting() }.disabled(!model.hosting)
             }
         }
-        Window("Remote Mac", id: "remote") { NativeViewer(model: model) }.defaultSize(width: 1440, height: 900).windowStyle(.titleBar)
-        MenuBarExtra("LocalLink", systemImage: "rectangle.connected.to.line.below") { NativeTray(model: model) }
+        Window("Remote Mac", id: "remote") { ModernWindowContent { NativeViewer(model: model) } }.defaultSize(width: 1440, height: 900).windowStyle(.titleBar)
+        MenuBarExtra("LocalLink", systemImage: "rectangle.connected.to.line.below") { ModernWindowContent { NativeTray(model: model) } }
     }
 }
 
@@ -41,7 +41,7 @@ struct LocalLinkNativeApp: App {
     @MainActor static func main() {
         let args = CommandLine.arguments
         if args.contains("--engine-info") {
-            print("LocalLink 0.5.2 native preview\nCapture: ScreenCaptureKit\nVideo: VideoToolbox hardware H.264 / HEVC\nSound: ScreenCaptureKit + AVAudioEngine\nInput: CoreGraphics\nNetwork: Network.framework TLS 1.2 PSK AES-128-GCM, port 48100\nExternal streaming applications: none")
+            print("LocalLink 0.5.3 \(RuntimeCompatibility.legacyAPIs ? "Legacy (macOS 12.3+)" : "Standard (macOS 14+)") native preview\nCapture: ScreenCaptureKit\nVideo: VideoToolbox hardware H.264 / HEVC\nSound: ScreenCaptureKit + AVAudioEngine\nInput: CoreGraphics\nNetwork: Network.framework TLS 1.2 PSK AES-128-GCM, port 48100\nExternal streaming applications: none")
             return
         }
         if let index = args.firstIndex(of: "--render-preview"), index + 1 < args.count {
@@ -62,6 +62,8 @@ struct LocalLinkNativeApp: App {
             }
             app.run(); return
         }
-        LocalLinkNativeApp.main()
+        if args.contains("--legacy-ui-smoke-test") { LegacyApplication.smokeTest(); return }
+        if #available(macOS 13.0, *) { LocalLinkNativeApp.main() }
+        else { LegacyApplication.run() }
     }
 }

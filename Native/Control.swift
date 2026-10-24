@@ -71,7 +71,7 @@ final class VideoPresenter {
         }
     }
     func begin() { lock.lock(); latest = nil; enabled = true; lock.unlock() }
-    func clear(keepImage: Bool = false) { lock.lock(); latest = nil; enabled = false; lock.unlock(); if !keepImage { DispatchQueue.main.async { [weak self] in self?.canvas?.display.sampleBufferRenderer.flush(removingDisplayedImage: true, completionHandler: nil) } } }
+    func clear(keepImage: Bool = false) { lock.lock(); latest = nil; enabled = false; lock.unlock(); if !keepImage { DispatchQueue.main.async { [weak self] in self?.canvas?.clearDisplay() } } }
 }
 
 final class NativeVideoView: NSView {
@@ -117,8 +117,20 @@ final class NativeVideoView: NSView {
         var sample: CMSampleBuffer?
         guard CMSampleBufferCreateReadyWithImageBuffer(allocator: nil, imageBuffer: pixels, formatDescription: format, sampleTiming: &timing, sampleBufferOut: &sample) == noErr, let sample else { return }
         if let attachments = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: true) as? [NSMutableDictionary], let attachment = attachments.first { attachment[kCMSampleAttachmentKey_DisplayImmediately] = true }
-        if display.sampleBufferRenderer.status == .failed { display.sampleBufferRenderer.flush() }
-        if display.sampleBufferRenderer.isReadyForMoreMediaData { display.sampleBufferRenderer.enqueue(sample) }
+        if #available(macOS 14.0, *), !RuntimeCompatibility.legacyAPIs {
+            if display.sampleBufferRenderer.status == .failed { display.sampleBufferRenderer.flush() }
+            if display.sampleBufferRenderer.isReadyForMoreMediaData { display.sampleBufferRenderer.enqueue(sample) }
+        } else {
+            if display.status == .failed { display.flush() }
+            if display.isReadyForMoreMediaData { display.enqueue(sample) }
+        }
+    }
+    func clearDisplay() {
+        if #available(macOS 14.0, *), !RuntimeCompatibility.legacyAPIs {
+            display.sampleBufferRenderer.flush(removingDisplayedImage: true, completionHandler: nil)
+        } else {
+            display.flushAndRemoveImage()
+        }
     }
     private func mouse(_ event: NSEvent, kind: String) {
         guard inputEnabled else { return }

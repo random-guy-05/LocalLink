@@ -175,7 +175,18 @@ final class NativeCapture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
         guard let display = content.displays.first else { throw LinkError.message("No display is attached to the host Mac.") }
         displayBounds = CGDisplayBounds(display.displayID)
         let filter = SCContentFilter(display: display, excludingWindows: [])
-        let source = CGSize(width: filter.contentRect.width * CGFloat(filter.pointPixelScale), height: filter.contentRect.height * CGFloat(filter.pointPixelScale))
+        let source: CGSize
+        if #available(macOS 14.0, *), !RuntimeCompatibility.legacyAPIs {
+            source = CGSize(width: filter.contentRect.width * CGFloat(filter.pointPixelScale), height: filter.contentRect.height * CGFloat(filter.pointPixelScale))
+        } else if let mode = CGDisplayCopyDisplayMode(display.displayID) {
+            source = CGSize(width: mode.pixelWidth, height: mode.pixelHeight)
+        } else {
+            // SCDisplay reports points. Resolve this display's backing scale,
+            // rather than assuming that every attached display is Retina.
+            let screen = NSScreen.screens.first { ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == display.displayID }
+            let scale = screen?.backingScaleFactor ?? 1
+            source = CGSize(width: CGFloat(display.width) * scale, height: CGFloat(display.height) * scale)
+        }
         let size = DisplayGeometry.capture(source: source, maximum: CGSize(width: request.width, height: request.height))
         guard size.width >= 16, size.height >= 16 else { throw LinkError.message("The display reported an invalid capture size.") }
         let width = Int(size.width), height = Int(size.height)
@@ -189,20 +200,22 @@ final class NativeCapture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
         encoder.onFailure = { [weak self] reason in self?.permits.signal(); self?.onFailure?(reason) }
         encoder.onDrop = { [weak self] in self?.permits.signal() }
         let configuration = SCStreamConfiguration()
-        configuration.captureResolution = .best
+        if #available(macOS 14.0, *), !RuntimeCompatibility.legacyAPIs { configuration.captureResolution = .best }
         configuration.width = width; configuration.height = height
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(request.fps))
         configuration.queueDepth = 3
         configuration.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         configuration.colorSpaceName = CGColorSpace.sRGB
         configuration.showsCursor = true
-        configuration.capturesAudio = request.audio
-        configuration.excludesCurrentProcessAudio = true
-        configuration.sampleRate = 48000; configuration.channelCount = 2
+        if #available(macOS 13.0, *) {
+            configuration.capturesAudio = request.audio
+            configuration.excludesCurrentProcessAudio = true
+            configuration.sampleRate = 48000; configuration.channelCount = 2
+        }
         let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
         self.stream = stream
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
-        if request.audio { try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: sampleQueue) }
+        if #available(macOS 13.0, *), request.audio { try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: sampleQueue) }
         do {
             try await stream.startCapture()
             try Task.checkCancellation()
@@ -211,7 +224,10 @@ final class NativeCapture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
             try? await stream.stopCapture()
             throw error
         }
-        return HostStatus(text: "Streaming", width: width, height: height, codec: request.hevc ? "HEVC" : "H.264")
+        let text: String
+        if #available(macOS 13.0, *) { text = "Streaming" }
+        else { text = "Streaming — system audio capture requires macOS 13 or later on the host" }
+        return HostStatus(text: text, width: width, height: height, codec: request.hevc ? "HEVC" : "H.264")
     }
     func stream(_ stream: SCStream, didStopWithError error: Error) { onFailure?(error.localizedDescription) }
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
@@ -219,7 +235,7 @@ final class NativeCapture: NSObject, SCStreamOutput, SCStreamDelegate, @unchecke
         if type == .screen {
             guard let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]], let raw = attachments.first?[.status] as? Int, SCFrameStatus(rawValue: raw) == .complete, let pixels = sampleBuffer.imageBuffer, permits.wait(timeout: .now()) == .success else { return }
             encoder?.encode(pixels, timestamp: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
-        } else if type == .audio, audioPending < 3, let packet = AudioPacket.encode(sampleBuffer) {
+        } else if #available(macOS 13.0, *), type == .audio, audioPending < 3, let packet = AudioPacket.encode(sampleBuffer) {
             audioPending += 1
             channel?.send(.audio, packet) { [weak self] in self?.sampleQueue.async { self?.audioPending -= 1 } }
         }

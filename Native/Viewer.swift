@@ -3,7 +3,7 @@ import SwiftUI
 struct NativeViewer: View {
     @ObservedObject var model: NativeModel
     @StateObject private var windowState = ViewerWindowState()
-    @Environment(\.openWindow) var openWindow
+    @Environment(\.localWindowAction) var openWindow
     @State private var controls = true
     @State private var hovering = false
     @State private var hideTask: Task<Void, Never>?
@@ -22,8 +22,8 @@ struct NativeViewer: View {
         }.background(.black).ignoresSafeArea().preferredColorScheme(.dark)
         .background(ViewerWindowBridge(state: windowState, model: model).frame(width: 0, height: 0))
         .onAppear { reveal() }
-        .onChange(of: model.connected) { _, _ in reveal() }
-        .onChange(of: model.captureInput) { _, _ in reveal() }
+        .onChange(of: model.connected) { _ in reveal() }
+        .onChange(of: model.captureInput) { _ in reveal() }
     }
     private var toolbar: some View {
         HStack(spacing: 13) {

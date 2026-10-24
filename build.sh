@@ -1,10 +1,16 @@
 #!/bin/bash
 set -euo pipefail
 task_root="$(cd "$(dirname "$0")" && pwd)"
-task_version="0.5.2"
+task_version="0.5.3"
 task_arches="${LOCALLINK_ARCHS:-$(uname -m)}"
-task_app="$task_root/dist/LocalLink.app"
-task_build="$task_root/build"
+task_variant="${LOCALLINK_VARIANT:-modern}"
+task_flags=(-D LOCALLINK_STANDARD)
+case "$task_variant" in
+  modern) task_minimum="14.0"; task_app="$task_root/dist/LocalLink.app" ;;
+  legacy) task_minimum="12.3"; task_app="$task_root/dist/legacy/LocalLink.app"; task_flags=(-D LOCALLINK_LEGACY) ;;
+  *) echo "Unknown build variant: $task_variant" >&2; exit 1 ;;
+esac
+task_build="$task_root/build/$task_variant"
 mkdir -p "$task_build" "$task_root/dist"
 rm -rf "$task_app"
 mkdir -p "$task_app/Contents/MacOS" "$task_app/Contents/Resources"
@@ -14,7 +20,7 @@ for task_arch in $task_arches; do
   task_binary="$task_build/LocalLink-$task_arch"
   /usr/bin/xcrun swiftc "$task_root"/Native/*.swift -parse-as-library -O -module-name LocalLink \
     -file-prefix-map "$task_root=/LocalLink" -debug-prefix-map "$task_root=/LocalLink" \
-    -target "$task_arch-apple-macosx14.0" -o "$task_binary"
+    -target "$task_arch-apple-macosx$task_minimum" "${task_flags[@]}" -o "$task_binary"
   task_slices+=("$task_binary")
 done
 /usr/bin/lipo -create "${task_slices[@]}" -output "$task_app/Contents/MacOS/LocalLink"
@@ -28,9 +34,9 @@ cat > "$task_app/Contents/Info.plist" <<PLIST
 <key>CFBundleDisplayName</key><string>LocalLink</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>$task_version</string>
-<key>CFBundleVersion</key><string>8</string>
+<key>CFBundleVersion</key><string>9</string>
 <key>CFBundleIconFile</key><string>LocalLink</string>
-<key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>LSMinimumSystemVersion</key><string>$task_minimum</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSScreenCaptureUsageDescription</key><string>Share this Mac’s screen and system sound with your paired LocalLink viewer.</string>
 <key>NSLocalNetworkUsageDescription</key><string>Connect directly to your other Mac for encrypted screen, sound, and input streaming.</string>
@@ -50,4 +56,8 @@ done
 /usr/bin/codesign --force --sign - "$task_app"
 /usr/bin/codesign --verify --deep --strict "$task_app"
 /usr/bin/lipo -info "$task_app/Contents/MacOS/LocalLink"
-echo "Built LocalLink $task_version at $task_app"
+for task_arch in $task_arches; do
+  task_minos="$(/usr/bin/xcrun vtool -arch "$task_arch" -show-build "$task_app/Contents/MacOS/LocalLink" | /usr/bin/awk '$1 == "minos" { print $2 }')"
+  [[ "$task_minos" == "$task_minimum" ]] || { echo "Incorrect $task_arch deployment target: $task_minos" >&2; exit 1; }
+done
+echo "Built LocalLink $task_version ($task_variant, macOS $task_minimum+) at $task_app"

@@ -126,8 +126,10 @@ enum NativePage: String, CaseIterable { case connect = "Computers", host = "This
             autoFullscreen = defaults.object(forKey: "autoFullscreen") as? Bool ?? true
             scale = DesktopScale(rawValue: defaults.string(forKey: "desktopScale") ?? "") ?? .fit
             showStats = defaults.bool(forKey: "viewerStats")
-            loginEnabled = SMAppService.mainApp.status == .enabled
-            loginApprovalNeeded = SMAppService.mainApp.status == .requiresApproval
+            if #available(macOS 13.0, *) {
+                loginEnabled = SMAppService.mainApp.status == .enabled
+                loginApprovalNeeded = SMAppService.mainApp.status == .requiresApproval
+            }
         }
         refreshPermissions()
         presenter.onPresented = { [weak self] in self?.frames += 1; self?.lastFrame = ProcessInfo.processInfo.systemUptime }
@@ -151,6 +153,10 @@ enum NativePage: String, CaseIterable { case connect = "Computers", host = "This
         if autoReconnect && UserDefaults.standard.bool(forKey: "resumeViewer") && !viewerKey.isEmpty { connect() }
     }
     func setLogin(_ enabled: Bool) {
+        guard #available(macOS 13.0, *) else {
+            error = "On Monterey, add LocalLink in System Preferences → Users & Groups → Login Items."
+            return
+        }
         do {
             if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
             loginEnabled = SMAppService.mainApp.status == .enabled

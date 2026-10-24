@@ -4,17 +4,32 @@
 
 A native remote desktop app for your own Macs. **LocalLink handles capture, video encoding and decoding, system sound, and mouse and keyboard control itself.** No Parsec, Sunshine, Moonlight, browser runtime, or streaming server application is required. Tailscale provides the private connection between your Macs.
 
-**[Download the native engine preview](https://github.com/random-guy-05/LocalLink/releases/tag/v0.5.2)** · macOS 14+ · Intel and Apple Silicon
+**[Download the native engine preview](https://github.com/random-guy-05/LocalLink/releases/tag/v0.5.3)** · separate Standard and Legacy DMGs · Intel and Apple Silicon
 
 ![LocalLink native dashboard](assets/preview.png)
 
 Version 0.5 improves the working native engine with a redesigned workspace, native full screen, higher-quality profiles, and persistent connections. A two-Mac stream was confirmed by the user on 0.4.1. The new fullscreen and host changes still need a live two-Mac check; synthetic tests cannot establish internet latency or smoothness.
 
+## Choose a DMG
+
+| Download | macOS versions | Architectures |
+| --- | --- | --- |
+| [LocalLink-0.5.3-universal.dmg](https://github.com/random-guy-05/LocalLink/releases/download/v0.5.3/LocalLink-0.5.3-universal.dmg) | Standard: macOS 14 or later | Intel and Apple Silicon |
+| [LocalLink-0.5.3-legacy-macos12.3-universal.dmg](https://github.com/random-guy-05/LocalLink/releases/download/v0.5.3/LocalLink-0.5.3-legacy-macos12.3-universal.dmg) | Legacy: Monterey 12.3+ and Ventura 13.x | Intel and Apple Silicon |
+
+The Legacy DMG is a separate download for older Macs. Monterey 12.0–12.2 needs updating to at least 12.3. macOS 11 and earlier are unsupported. Choose the appropriate DMG independently on each Mac; a Legacy viewer can connect to the Standard host using the existing pairing key and protocol (including a 0.5.1+ host).
+
+Legacy retains hardware H.264/HEVC video, remote control, native fullscreen, saved pairing keys and reconnects. On Monterey, AppKit manages the same SwiftUI workspace and viewer because SwiftUI's window-opening and menu-bar APIs require Ventura. The Legacy build uses AVSampleBufferDisplayLayer directly and display-mode pixel dimensions for Retina capture; Standard keeps its newer video renderer and capture-resolution APIs.
+
+**Monterey host limitations:** system audio capture requires macOS 13+ on the host; video and control remain available. A Monterey viewer can play system audio sent by a newer host. For launch at login on Monterey, add LocalLink manually in System Preferences → Users & Groups → Login Items; Ventura and later retain the built-in login toggle.
+
+The Legacy build is compiled for macOS 12.3 on both architectures. Its compatibility paths and synthetic hardware video/transport tests are exercised on a newer Mac; an actual Monterey/Ventura two-Mac session has not yet been verified.
+
 ## Install on both Macs
 
-1. Download `LocalLink-0.5.2-universal.dmg`, open it, and drag LocalLink to Applications on **both** Macs.
+1. Download the appropriate Standard or Legacy DMG for each Mac, open it, and drag LocalLink to Applications on **both** Macs.
 2. Keep [Tailscale](https://tailscale.com/download/mac) connected on both Macs.
-3. On the host Mac, open LocalLink → **This Mac**. Give **LocalLink** Screen Recording (screen and system audio) and Accessibility permissions. Restart LocalLink after granting Screen Recording.
+3. On the host Mac, open LocalLink → **This Mac**. Give **LocalLink** Screen Recording (screen and system audio on newer macOS) and Accessibility permissions. On Monterey use System Preferences → Security & Privacy → Privacy. Restart LocalLink after granting Screen Recording.
 4. Click **Start sharing this Mac**, then **Copy key**. Keep the host awake, signed in, and LocalLink running. LocalLink prevents idle system sleep while sharing; it does not bypass the lock screen, FileVault login, or a closed laptop lid.
 5. On the viewing Mac, enter the host’s Tailscale IP or hostname and paste its pairing key. Click **Connect to Mac**.
 6. Click the picture in the remote desktop window for input. Click the green macOS window button for native full screen (red closes, yellow minimizes); Command–Shift–D disconnects. Control–Command–F toggles native full screen; Control–Option–Command–Escape releases or recaptures input. Move to the top edge for the floating controls. Fit, Fill and Actual Pixels scaling are available there. Closing the viewer disconnects it. Network drops keep the viewer window and its full-screen Space open and retry automatically. Manual disconnect cancels retries, preserves your key and offers Reconnect. Stop sharing on the host to make it unavailable.
@@ -57,15 +72,18 @@ Current limits: one display (the first capture display), one viewer, SDR 8-bit 4
 
 ## Build and verify
 
-Requires Apple Command Line Tools on macOS 14+. No third-party runtime, package manager or dependency download is needed to build the app.
+Build with a current Apple Command Line Tools SDK. Deployment targets are 14.0 for Standard and 12.3 for Legacy; compiling with an old SDK is not supported. No third-party runtime, package manager or dependency download is needed to build the app.
 
 ```sh
 bash build.sh
 LOCALLINK_ARCHS="x86_64 arm64" bash build.sh
+LOCALLINK_VARIANT=legacy LOCALLINK_ARCHS="x86_64 arm64" bash build.sh
 bash test.sh
+LOCALLINK_VARIANT=legacy bash test.sh
+dist/legacy/LocalLink.app/Contents/MacOS/LocalLink --legacy-ui-smoke-test
 ```
 
-`dist/LocalLink.app` is the universal app. Tests check encrypted loopback traffic, wrong-key rejection, binary and stream bounds, and synthetic hardware H.264/HEVC video round trips through 4K. A native viewer integration test checks repeated reconnects with one key, automatic recovery after an interrupted socket, manual disconnect cancelling retries, static desktop heartbeats, and display fitting. Synthetic tests never capture the screen or inject input. GitHub CI compiles both architectures and runs the transport tests; its virtual machine skips hardware codec tests. Neither replaces a two-Mac session test.
+`dist/LocalLink.app` is Standard; `dist/legacy/LocalLink.app` is Legacy. Build both architectures as above for universal apps. Build verification checks each Mach-O deployment target as well as the app manifest. The legacy UI smoke test checks window creation/reopening, fullscreen control wiring, menus and synthetic frame enqueue/clear without capturing a screen or connecting to another Mac. Tests check encrypted loopback traffic, wrong-key rejection, binary and stream bounds, and synthetic hardware H.264/HEVC video round trips through 4K. A native viewer integration test checks repeated reconnects with one key, automatic recovery after an interrupted socket, manual disconnect cancelling retries, static desktop heartbeats, and display fitting. Synthetic tests never capture the screen or inject input. GitHub CI builds Standard and Legacy for both architectures and runs session, UI and transport checks; its virtual machine skips hardware codec tests. Neither replaces a two-Mac session test.
 
 To package the optional styled DMG (packaging-only Python dependency):
 
@@ -73,6 +91,7 @@ To package the optional styled DMG (packaging-only Python dependency):
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-release.txt
 DMGBUILD=.venv/bin/dmgbuild bash release.sh
+LOCALLINK_VARIANT=legacy DMGBUILD=.venv/bin/dmgbuild bash release.sh
 ```
 
 The release includes a SHA-256 checksum. Personal addresses, pairing keys and local settings are never bundled.
