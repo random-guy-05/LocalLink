@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-task_root="$(cd "$(dirname "$0")" && pwd)"
+task_root="$(cd "$(dirname "$0")/.." && pwd)"
 task_version="0.5.3"
 task_arches="${LOCALLINK_ARCHS:-$(uname -m)}"
 task_variant="${LOCALLINK_VARIANT:-modern}"
@@ -18,7 +18,7 @@ task_slices=()
 for task_arch in $task_arches; do
   case "$task_arch" in arm64|x86_64) ;; *) echo "Unsupported architecture: $task_arch" >&2; exit 1 ;; esac
   task_binary="$task_build/LocalLink-$task_arch"
-  /usr/bin/xcrun swiftc "$task_root"/Native/*.swift -parse-as-library -O -module-name LocalLink \
+  /usr/bin/xcrun swiftc "$task_root"/Sources/*.swift -parse-as-library -O -module-name LocalLink \
     -file-prefix-map "$task_root=/LocalLink" -debug-prefix-map "$task_root=/LocalLink" \
     -target "$task_arch-apple-macosx$task_minimum" "${task_flags[@]}" -o "$task_binary"
   task_slices+=("$task_binary")

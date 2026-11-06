@@ -18,11 +18,11 @@ jobs:
       - name: Build Intel and Apple Silicon
         env:
           LOCALLINK_ARCHS: x86_64 arm64
-        run: bash build.sh
+        run: bash scripts/build.sh
       - name: Test encrypted native transport
         env:
           LOCALLINK_SKIP_HARDWARE_TEST: '1'
-        run: bash test.sh
+        run: bash scripts/test.sh
       - name: Test window and video display compatibility
         run: |
           if [[ "$LOCALLINK_VARIANT" == "legacy" ]]; then

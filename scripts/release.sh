@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-task_root="$(cd "$(dirname "$0")" && pwd)"
+task_root="$(cd "$(dirname "$0")/.." && pwd)"
 task_version="0.5.3"
 task_dmgbuild="${DMGBUILD:-dmgbuild}"
 task_variant="${LOCALLINK_VARIANT:-modern}"
